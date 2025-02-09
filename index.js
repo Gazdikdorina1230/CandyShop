@@ -1,33 +1,33 @@
 const express = require('express');
+const morgan = require('morgan');
 const app = express();
 const port = 3000;
 const db = require('./firebase');
-const usersRouter = require('./routes/users');
-app.use('/api/users', usersRouter);
+const uploadRouter = require('./routes/upload');
 
-// JSON válaszokat kérünk
+app.use('/api/upload', uploadRouter);
+
 app.use(express.json());
 
-// Lekérjük az összes terméket a 'products' kollekcióból
-app.get('/api/products', async (req, res) => {
-  try {
-    const productsSnapshot = await db.collection('products').get();
-    const products = productsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    res.status(200).json(products);  // Válasz JSON formátumban
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    res.status(500).send('Internal Server Error');
-  }
+app.use(morgan('dev'));
+
+const cartsRouter = require('./routes/carts');
+const usersRouter = require('./routes/users');
+const productsRoutes = require('./routes/products');
+const ordersRouter = require('./routes/orders');
+const adminRouter = require('./routes/admin');
+
+app.use('/api/carts', cartsRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/products', productsRoutes);
+app.use('/api/orders', ordersRouter);
+app.use('/api/admin', adminRouter);
+
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Kosár kezelése
-const cartsRouter = require('./routes/carts');
-app.use('/api/carts', cartsRouter);
-
-// Indítjuk az alkalmazást
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
