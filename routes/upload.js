@@ -3,23 +3,31 @@ const multer = require('multer');
 const admin = require('firebase-admin');
 const router = express.Router();
 
-// Multer konfigurálása: használjuk a memória-alapú tárolást, így a fájl a req.file.buffer-ben lesz elérhető
-const upload = multer({ storage: multer.memoryStorage() });
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// POST /api/upload - Kép feltöltése
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, and WEBP are allowed.'));
+    }
+  }
+});
+
 router.post('/', upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
   try {
-    // A Storage bucket elérése
     const bucket = admin.storage().bucket();
-    // Hozz létre egy új fájl referenciát a bucket-ben. Például az 'images' mappába mentjük, és az időbélyeget is hozzáadjuk a névhez.
     const fileName = `images/${Date.now()}_${req.file.originalname}`;
     const file = bucket.file(fileName);
 
-    // A fájl feltöltése (streaming)
     const blobStream = file.createWriteStream({
       metadata: {
         contentType: req.file.mimetype
@@ -32,15 +40,15 @@ router.post('/', upload.single('image'), async (req, res) => {
     });
 
     blobStream.on('finish', async () => {
-      // (Opcionális) A fájl publikus elérése, ha azt szeretnéd, hogy bárki megtekinthesse
       await file.makePublic();
-      // A publikus URL generálása
+      
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${file.name}`;
-      // A válaszban visszaküldjük a képfeltöltés URL-jét
-      res.status(200).json({ imageUrl: publicUrl });
+
+      res.status(200).json({
+        publicUrl: publicUrl 
+      });
     });
 
-    // A fájl tartalmának befejeződése a feltöltéshez
     blobStream.end(req.file.buffer);
   } catch (error) {
     console.error('Error during upload:', error);

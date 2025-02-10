@@ -1,22 +1,31 @@
-const jwt = require('jsonwebtoken');
-require('dotenv').config(); 
+const admin = require('firebase-admin');
 
-function authenticateToken(req, res, next) {
-  
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; 
-
-  if (!token) {
-    return res.status(401).json({ error: 'Missing token' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Invalid or expired token' });
+async function authenticateToken(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
-    req.user = user;
-    next();
-  });
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(token);
+        req.user = decodedToken;
+
+        const userRecord = await admin.auth().getUser(decodedToken.uid);
+        req.user.role = userRecord.customClaims?.role || 'user';
+
+        next();
+    } catch (error) {
+        console.error('Token verification failed:', error);
+        return res.status(403).json({ error: 'Forbidden: Invalid token' });
+    }
 }
 
-module.exports = authenticateToken;
+function isAdmin(req, res, next) {
+    if (req.user && req.user.role === 'admin') {
+        return next();
+    }
+    return res.status(403).json({ error: 'Forbidden: Admins only' });
+}
+
+module.exports = { authenticateToken, isAdmin };
